@@ -3,74 +3,56 @@ import SwiftUI
 struct RootView: View {
     @State private var selectedTab: Int = 0
 
+    private let tabs: [CustomTabBar.TabItem] = [
+        CustomTabBar.TabItem(id: 0, title: "今日", icon: "drop.fill"),
+        CustomTabBar.TabItem(id: 1, title: "历史", icon: "calendar"),
+        CustomTabBar.TabItem(id: 2, title: "设置", icon: "gearshape.fill")
+    ]
+
     var body: some View {
-        #if os(iOS)
-        if UIDevice.current.isPad {
-            // iPad layout - NavigationSplitView
-            NavigationSplitView {
-                List {
-                    Button("今日") {
-                        selectedTab = 0
-                    }
-                    .tag(0)
+        ZStack {
+            // 背景色
+            DesignTokens.creamWhite
+                .ignoresSafeArea()
 
-                    Button("历史") {
-                        selectedTab = 1
-                    }
-                    .tag(1)
+            VStack(spacing: 0) {
+                // 主内容区
+                TabContentView(selectedTab: selectedTab)
 
-                    Button("设置") {
-                        selectedTab = 2
-                    }
-                    .tag(2)
-                }
-                .navigationTitle("饮水助手")
-                .listStyle(.sidebar)
-            } detail: {
-                switch selectedTab {
-                case 0: TodayView()
-                case 1: HistoryView()
-                case 2: SettingsView()
-                default: TodayView()
-                }
-            }
-        } else {
-            // iPhone layout - TabView
-            TabView {
-                TodayView()
-                    .tabItem {
-                        Label("今日", systemImage: "drop.fill")
-                    }
+                Spacer()
 
-                HistoryView()
-                    .tabItem {
-                        Label("历史", systemImage: "calendar")
-                    }
-
-                SettingsView()
-                    .tabItem {
-                        Label("设置", systemImage: "gearshape.fill")
-                    }
+                // 自定义底部导航栏
+                CustomTabBar(selectedTab: $selectedTab, tabs: tabs)
             }
         }
-        #else
-        // macOS fallback - TabView
-        TabView {
-            TodayView()
-                .tabItem {
-                    Label("今日", systemImage: "drop.fill")
-                }
-
-            HistoryView()
-                .tabItem {
-                    Label("历史", systemImage: "calendar")
-                }
-
-            SettingsView()
-                .tabItem {
-                    Label("设置", systemImage: "gearshape.fill")
-                }
-        }
-        #endif
     }
+}
+
+/// 内容视图
+struct TabContentView: View {
+    let selectedTab: Int
+
+    var body: some View {
+        Group {
+            switch selectedTab {
+            case 0:
+                TodayView()
+                    .transition(.opacity)
+            case 1:
+                HistoryView()
+                    .transition(.opacity)
+            case 2:
+                SettingsView()
+                    .transition(.opacity)
+            default:
+                TodayView()
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: selectedTab)
+    }
+}
+
+#Preview {
+    RootView()
 }

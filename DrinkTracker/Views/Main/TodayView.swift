@@ -6,6 +6,8 @@ struct TodayView: View {
     @StateObject private var viewModel: TodayViewModel
     @State private var showingAddDrink = false
     @State private var addButtonScale: Double = 1.0
+    @State private var digitalScale: Double = 1.0
+    @State private var showDigitalPop = false
 
     init() {
         let store = DrinkStore(context: CoreDataStack.shared.viewContext)
@@ -25,10 +27,9 @@ struct TodayView: View {
     }
 
     var stateColor: Color {
-        if viewModel.progress < 0.3 { return Color.orange }
-        else if viewModel.progress < 0.6 { return Color.blue }
-        else if viewModel.progress < 1.0 { return Color.green }
-        else { return Color.green }
+        if viewModel.progress < 0.3 { return DesignTokens.stateOrange }
+        else if viewModel.progress < 0.6 { return DesignTokens.stateTeal }
+        else { return DesignTokens.stateEmerald }
     }
 
     var stateText: String {
@@ -59,22 +60,16 @@ struct TodayView: View {
     }
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                // 顶部标题区
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(dateString)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.gray)
-                        .tracking(2)
+        ZStack {
+            // 奶油白背景
+            DesignTokens.creamWhite
 
-                    Text("今日饮水")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundColor(.primary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
+            // 环境氛围光晕
+            atmosphericGlows
+
+            VStack(spacing: 0) {
+                // 顶部标题区
+                TodayHeaderView(dateString: dateString)
 
                 ScrollView {
                     VStack(spacing: 16) {
@@ -94,49 +89,123 @@ struct TodayView: View {
                     }
                 }
             }
-            .background(Color(red: 0.98, green: 0.97, blue: 0.89))
-            .navigationBarHidden(true)
-            .sheet(isPresented: $showingAddDrink) {
-                AddDrinkView(drinkTypes: viewModel.drinkTypes.isEmpty ?
-                             DrinkStore(context: context).getDrinkTypes() :
-                             viewModel.drinkTypes) {
-                    viewModel.loadTodayData()
+        }
+        .sheet(isPresented: $showingAddDrink) {
+            AddDrinkView(drinkTypes: viewModel.drinkTypes.isEmpty ?
+                         DrinkStore(context: context).getDrinkTypes() :
+                         viewModel.drinkTypes) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    digitalScale = 1.35
                 }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                        digitalScale = 1.0
+                    }
+                }
+                viewModel.loadTodayData()
             }
         }
+    }
+
+    // MARK: - Atmospheric Glows
+
+    private var atmosphericGlows: some View {
+        ZStack {
+            // 左上角光晕
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [DesignTokens.lightMint.opacity(0.4), .clear],
+                        center: .topLeading,
+                        startRadius: 0,
+                        endRadius: 200
+                    )
+                )
+                .blur(radius: 80)
+                .offset(x: -100, y: -100)
+
+            // 右下角光晕
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [DesignTokens.paleGreen.opacity(0.5), .clear],
+                        center: .bottomTrailing,
+                        startRadius: 0,
+                        endRadius: 250
+                    )
+                )
+                .blur(radius: 80)
+                .offset(x: 100, y: 100)
+        }
+        .allowsHitTesting(false)
     }
 
     // MARK: - Subviews
 
     private var liquidProgressCard: some View {
         ZStack(alignment: .bottom) {
+            // 主卡片背景 - 145°对角渐变
             RoundedRectangle(cornerRadius: 24)
-                .fill(Color(red: 0.1, green: 0.1, blue: 0.18))
+                .fill(DesignTokens.cardGradient)
                 .frame(height: 280)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24)
+                        .stroke(DesignTokens.glassBorder, lineWidth: 1)
+                )
 
+            // 水位效果层
             GeometryReader { geometry in
                 ZStack(alignment: .bottom) {
+                    // 水位渐变填充
                     RoundedRectangle(cornerRadius: 24)
-                        .fill(stateColor.opacity(0.3))
+                        .fill(
+                            LinearGradient(
+                                colors: [DesignTokens.lightMint, DesignTokens.mediumTeal],
+                                startPoint: .bottom,
+                                endPoint: .top
+                            )
+                        )
                         .frame(height: geometry.size.height * min(viewModel.progress, 1.0))
-                        .animation(.spring(response: 0.8, dampingFraction: 0.7), value: viewModel.progress)
+                        .animation(.interpolatingSpring(duration: 0.9, bounce: 0.4), value: viewModel.progress)
+
+                    // 顶部波浪效果
+                    if viewModel.progress > 0 {
+                        WaveView()
+                            .stroke(DesignTokens.mediumTeal.opacity(0.3), lineWidth: 3)
+                            .frame(height: 20)
+                            .offset(y: -geometry.size.height * min(viewModel.progress, 1.0))
+                    }
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 24))
 
+            // 内容层
             VStack(spacing: 16) {
                 Spacer()
 
+                // 数字显示
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("\(viewModel.todayTotal)")
                         .font(.system(size: 88, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(DesignTokens.darkTeal)
+                        .scaleEffect(digitalScale)
 
                     Text("/ \(viewModel.dailyGoal) 杯")
                         .font(.system(size: 24, weight: .regular))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(DesignTokens.mediumTeal)
+                }
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                        digitalScale = 1.3
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                            digitalScale = 1.0
+                        }
+                    }
                 }
 
+                // 状态指示器
                 HStack(spacing: 8) {
                     Circle()
                         .fill(stateColor)
@@ -145,29 +214,34 @@ struct TodayView: View {
 
                     Text(stateText)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(DesignTokens.darkTeal)
 
                     Image(systemName: stateIcon)
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(DesignTokens.mediumTeal)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(Capsule().fill(Color.white.opacity(0.15)))
+                .background(Capsule().fill(DesignTokens.glassBackground))
+                .overlay(
+                    Capsule()
+                        .stroke(DesignTokens.glassBorder, lineWidth: 1)
+                )
 
                 Spacer()
 
+                // 进度条
                 VStack(spacing: 4) {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             RoundedRectangle(cornerRadius: 2)
-                                .fill(Color.white.opacity(0.2))
+                                .fill(DesignTokens.paleGreen)
                                 .frame(height: 6)
 
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(stateColor)
                                 .frame(width: geo.size.width * min(viewModel.progress, 1), height: 6)
-                                .shadow(color: stateColor, radius: 3)
+                                .shadow(color: stateColor.opacity(0.5), radius: 3)
                         }
                     }
                     .frame(height: 6)
@@ -191,22 +265,22 @@ struct TodayView: View {
         HStack(spacing: 12) {
             Image(systemName: "quote.bubble.fill")
                 .font(.system(size: 24))
-                .foregroundColor(.blue)
+                .foregroundColor(DesignTokens.mintGreen)
 
             Text(quote)
                 .font(.system(size: 14))
-                .foregroundColor(.secondary)
+                .foregroundColor(DesignTokens.darkTeal)
                 .lineLimit(2)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(.ultraThinMaterial)
+                .fill(DesignTokens.glassBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                .stroke(DesignTokens.glassBorder, lineWidth: 1)
         )
         .padding(.horizontal, 20)
     }
@@ -224,7 +298,7 @@ struct TodayView: View {
             showingAddDrink = true
         }) {
             HStack {
-                Text("+")
+                Image(systemName: "plus")
                     .rotationEffect(.degrees(addButtonScale == 0.97 ? 90 : 0))
                     .animation(.spring(response: 0.2), value: addButtonScale)
                 Text("添加一杯饮水")
@@ -233,7 +307,7 @@ struct TodayView: View {
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
-            .background(Color(red: 0.1, green: 0.1, blue: 0.18))
+            .background(DesignTokens.mintGreen)
             .cornerRadius(16)
         }
         .scaleEffect(addButtonScale)
@@ -244,8 +318,9 @@ struct TodayView: View {
         Group {
             if !viewModel.recentRecords.isEmpty {
                 VStack(spacing: 10) {
-                    ForEach(viewModel.recentRecords) { record in
-                        recordItem(for: record)
+                    ForEach(viewModel.recentRecords.indices, id: \.self) { index in
+                        let record = viewModel.recentRecords[index]
+                        recordItem(for: record, index: index)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -254,45 +329,75 @@ struct TodayView: View {
         }
     }
 
-    private func recordItem(for record: DrinkRecord) -> some View {
+    private func recordItem(for record: DrinkRecord, index: Int) -> some View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.blue.opacity(0.2))
+                    .fill(DesignTokens.paleGreen)
                     .frame(width: 40, height: 40)
 
                 Image(systemName: record.icon)
                     .font(.system(size: 20))
-                    .foregroundColor(.blue)
+                    .foregroundColor(DesignTokens.mintGreen)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(record.cups) 杯\(record.drinkTypeName)")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.primary)
+                    .foregroundColor(DesignTokens.darkTeal)
 
                 Text("约 \(record.cups * 250)ml")
                     .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(DesignTokens.mediumTeal)
             }
 
             Spacer()
 
             Text(formatTime(record.date))
                 .font(.system(size: 14))
-                .foregroundColor(.secondary)
+                .foregroundColor(DesignTokens.mediumTeal)
         }
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.8))
-                .background(RoundedRectangle(cornerRadius: 12).fill(.ultraThinMaterial))
+                .fill(DesignTokens.glassBackground)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(DesignTokens.glassBorder, lineWidth: 1)
+        )
+        .transition(.asymmetric(
+            insertion: .slide.combined(with: .opacity),
+            removal: .opacity
+        ))
     }
 
     private func formatTime(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: date)
+    }
+}
+
+// MARK: - Wave View for Water Effect
+
+struct WaveView: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let width = rect.width
+        let height = rect.height
+
+        path.move(to: CGPoint(x: 0, y: height / 2))
+
+        for x in stride(from: 0, through: width, by: 1) {
+            let y = sin(x * 0.05) * 5 + height / 2
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+
+        path.addLine(to: CGPoint(x: width, y: height))
+        path.addLine(to: CGPoint(x: 0, y: height))
+        path.closeSubpath()
+
+        return path
     }
 }
